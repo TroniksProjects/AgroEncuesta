@@ -17,6 +17,12 @@ public class QuestionsManager : MonoBehaviour
     public TextMeshProUGUI txtAnswerB;
     public TextMeshProUGUI txtAnswerC;
 
+    private Button OptionA;
+    private Button OptionB;
+    private Button OptionC;
+
+    public ParticleSystem Confeti;
+
     [Header("Popups Feedback")]
     public TextMeshProUGUI txtCorrectFeedback;
 
@@ -28,14 +34,29 @@ public class QuestionsManager : MonoBehaviour
     [SerializeField]
     private int currentQuestion = 0;
 
+    [SerializeField]
+    private int playerAttempts = 1;
+
+    private void Start()
+    {
+        Confeti.Stop();
+        OptionA = txtAnswerA.transform.GetComponentsInParent<Button>(true)[0];
+        OptionB = txtAnswerB.transform.GetComponentsInParent<Button>(true)[0];
+        OptionC = txtAnswerC.transform.GetComponentsInParent<Button>(true)[0];
+    }
+
     public void LoadAnimalSurvey(string Category)
     {
+        UIManager.Instance.EnableBlockPanel();
         currentQuestion = 0;
+        playerAttempts = 1;
         var AnimalsSurvey = Cuestionarios.FirstOrDefault(s => s.SurveyName == "Animales");
         CurrentSurvey = AnimalsSurvey.Categories.FirstOrDefault(c => c.Category == Category);
 
         txtCorrectFeedback.text = AnimalsSurvey.CorrectFeedBack;
         txtIncorrectFeedback.text = AnimalsSurvey.wrongFeedback;
+
+        Randomizer.Randomize(CurrentSurvey.questions);
         UpdateQuestionUI();
 
         UIManager.Instance.ShowSurveyScreen();
@@ -44,11 +65,13 @@ public class QuestionsManager : MonoBehaviour
     public void LoadCultivosSurvey(string Category)
     {
         currentQuestion = 0;
+        playerAttempts = 1;
         var cultivosSurvey = Cuestionarios.FirstOrDefault(s => s.SurveyName == "Cultivos");
         CurrentSurvey = cultivosSurvey.Categories.FirstOrDefault(c => c.Category == Category);
 
         txtCorrectFeedback.text = cultivosSurvey.CorrectFeedBack;
         txtIncorrectFeedback.text = cultivosSurvey.wrongFeedback;
+        Randomizer.Randomize(CurrentSurvey.questions);
         UpdateQuestionUI();
 
         UIManager.Instance.ShowSurveyScreen();
@@ -56,12 +79,46 @@ public class QuestionsManager : MonoBehaviour
 
     private void UpdateQuestionUI()
     {
+        OptionA.onClick.RemoveAllListeners();
+        OptionB.onClick.RemoveAllListeners();
+        OptionC.onClick.RemoveAllListeners();
+
+        string[] Answers = new string[3];
+
+        Answers[0] = (CurrentSurvey.questions[currentQuestion].answerA) + "|A";
+        Answers[1] = (CurrentSurvey.questions[currentQuestion].answerB) + "|B";
+        Answers[2] = (CurrentSurvey.questions[currentQuestion].answerC) + "|C";
+
+        Randomizer.Randomize(Answers);
+
+        for (int i = 0; i < Answers.Length; i++)
+        {
+            string[] AnswerRandom = Answers[i].Split('|');
+            int AnswerIndex = (AnswerRandom[1] == "A") ? 1 : ((AnswerRandom[1] == "B") ? 2 : 3);
+
+            switch (i)
+            {
+                case 0:
+                    OptionA.onClick.AddListener(() => { SelectAnswer(AnswerIndex); });
+                    txtAnswerA.text = AnswerRandom[0];
+                    break;
+
+                case 1:
+                    OptionB.onClick.AddListener(() => { SelectAnswer(AnswerIndex); });
+                    txtAnswerB.text = AnswerRandom[0];
+                    break;
+
+                case 2:
+                    OptionC.onClick.AddListener(() => { SelectAnswer(AnswerIndex); });
+                    txtAnswerC.text = AnswerRandom[0];
+                    break;
+            }
+        }
+
         txtInitial.text = CurrentSurvey.CategoryInitial;
         txtTitle.text = CurrentSurvey.Category;
+
         txtQuestion.text = CurrentSurvey.questions[currentQuestion].question;
-        txtAnswerA.text = CurrentSurvey.questions[currentQuestion].answerA;
-        txtAnswerB.text = CurrentSurvey.questions[currentQuestion].answerB;
-        txtAnswerC.text = CurrentSurvey.questions[currentQuestion].answerC;
 
         if (CurrentSurvey.questions[currentQuestion].QuestionSprite)
         {
@@ -75,6 +132,10 @@ public class QuestionsManager : MonoBehaviour
     /// <param name="answerIndex"></param>
     public void SelectAnswer(int answerIndex)
     {
+        Debug.LogError(answerIndex);
+        AudioManager.Instance.PlayUIButton();
+        UIManager.Instance.EnableBlockPanel();
+
         if (CurrentSurvey.questions[currentQuestion].correctAnswer == answerIndex)
         {
             if (CurrentSurvey.questions[currentQuestion].QuestionSprite)
@@ -86,38 +147,58 @@ public class QuestionsManager : MonoBehaviour
         }
         else
         {
-            UIManager.Instance.ShowIncorrectPopUP();
+            if (playerAttempts > 0)
+            {
+                playerAttempts--;
+                UIManager.Instance.ShowIncorrectPopUP();
+            }
+            else
+            {
+                AudioManager.Instance.StopGameMusic();
+                UIManager.Instance.HideRetryButton();
+                IncorrectFeedback();
+            }
         }
     }
 
     private void CorrectFeedback()
     {
+        Confeti.Play();
         UIManager.Instance.ShowCorrectPopUP();
     }
 
     private void IncorrectFeedback()
     {
+        AudioManager.Instance.PlayLoseMusic();
         UIManager.Instance.ShowIncorrectPopUP();
     }
 
     public void NextQuestion()
     {
         UIManager.Instance.HideCorrectPopUP();
-
-        if (currentQuestion < CurrentSurvey.questions.Length -1 )
+        Confeti.Stop();
+        if (currentQuestion < CurrentSurvey.questions.Length - 1)
         {
             currentQuestion++;
             UpdateQuestionUI();
-        }else
+        }
+        else
         {
             currentQuestion = 0;
+            playerAttempts = 1;
+
+            AudioManager.Instance.StopGameMusic();
+            AudioManager.Instance.PlayWinMusic();
+
             UIManager.Instance.HideQuestionScreen();
         }
     }
 
-    public void CancelGameFromIncorrect ()
+    public void CancelGameFromIncorrect()
     {
         currentQuestion = 0;
+        AudioManager.Instance.StopLoseMusic();
+        AudioManager.Instance.PlayLobbyMusic();
         UIManager.Instance.HideIncorrectPopUP();
         UIManager.Instance.HideQuestionScreen();
     }
@@ -156,4 +237,22 @@ public struct Question
     public Sprite QuestionSprite;
     public Sprite CorrectSprite;
     public int correctAnswer;
+}
+
+public class Randomizer
+{
+    public static void Randomize<T>(T[] items)
+    {
+        System.Random rand = new System.Random();
+
+        // For each spot in the array, pick
+        // a random item to swap into that spot.
+        for (int i = 0; i < items.Length - 1; i++)
+        {
+            int j = rand.Next(i, items.Length);
+            T temp = items[i];
+            items[i] = items[j];
+            items[j] = temp;
+        }
+    }
 }
